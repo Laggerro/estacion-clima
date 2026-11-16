@@ -64,14 +64,15 @@ async function loadWeatherData() {
     
     // Parsear timestamps para poder filtrar por fechas
     allRecords = rawData.map(item => {
-      const isoString = `${item.fecha}T${item.hora}`;
-      const dateObj = new Date(isoString);
-      return {
-        ...item,
-        timestamp: isNaN(dateObj.getTime()) ? Date.now() : dateObj.getTime(),
-        shortLabel: `${item.fecha.slice(5)} ${item.hora.slice(0, 5)}`
-      };
-    });
+  const ts = parseFechaArgentina(item.fecha, item.hora);
+  // shortLabel muestra "16/11 12:40"
+  const shortDate = item.fecha.includes("/") ? item.fecha.slice(0, 5) : `${item.fecha.slice(8, 10)}/${item.fecha.slice(5, 7)}`;
+  return {
+    ...item,
+    timestamp: isNaN(ts) ? Date.now() : ts,
+    shortLabel: `${shortDate} ${item.hora.slice(0, 5)}`
+  };
+});
 
     if (allRecords.length === 0) {
       throw new Error("La hoja no contiene registros todavía.");
@@ -88,6 +89,25 @@ async function loadWeatherData() {
     refreshBtn.classList.remove("spinning");
   }
 }
+
+function parseFechaArgentina(fechaStr, horaStr) {
+  // Soporta tanto "16/11/2026" como "2026-11-16"
+  let y, m, d;
+  if (fechaStr.includes("/")) {
+    const parts = fechaStr.split("/");
+    d = Number(parts[0]);
+    m = Number(parts[1]) - 1;
+    y = Number(parts[2]);
+  } else {
+    const parts = fechaStr.split("-");
+    y = Number(parts[0]);
+    m = Number(parts[1]) - 1;
+    d = Number(parts[2]);
+  }
+  const tParts = (horaStr || "00:00:00").split(":");
+  return new Date(y, m, d, Number(tParts[0] || 0), Number(tParts[1] || 0), Number(tParts[2] || 0)).getTime();
+}
+
 
 function renderDashboard() {
   const latest = allRecords[allRecords.length - 1];
