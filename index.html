@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estación Climatológica Wilde ISD</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Chart.js y Lucide Icons -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo-badge"><i data-lucide="radio"></i></div>
+      <div>
+        <h1>Estación Climatológica Wilde ISD</h1>
+        <span class="subtitle">Garita Stevenson Experimental • Telemetría cada 5 min</span>
+      </div>
+    </div>
+
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-view="dashboard">
+        <i data-lucide="layout-dashboard"></i> Monitor en Vivo
+      </button>
+      <button class="tab-btn" data-view="historico">
+        <i data-lucide="bar-chart-3"></i> Histórico y Estadísticas
+      </button>
+      <button id="btn-refresh" class="refresh-btn" title="Actualizar datos">
+        <i data-lucide="refresh-cw"></i>
+      </button>
+    </nav>
+  </header>
+
+  <main class="container">
+    <!-- Banner de estado de carga / error -->
+    <div id="status-banner" class="status-banner">
+      <span class="pulse"></span> Conectando con telemetría de Google Sheets...
+    </div>
+
+    <!-- ================= VISTA 1: MONITOR EN VIVO ================= -->
+    <section id="view-dashboard" class="view active">
+      <!-- Hero Card: Estado actual del cielo + Ciclo solar -->
+      <div class="hero-grid">
+        <div class="card hero-card" id="sky-card">
+          <div class="sky-info">
+            <span class="badge-live"><span class="dot"></span> ÚLTIMA LECTURA: <strong id="last-timestamp">--/--/---- --:--</strong></span>
+            <h2 id="sky-state">Cargando...</h2>
+            <p id="rain-status" class="rain-pill">Sin precipitaciones</p>
+          </div>
+          <div class="sky-icon-box" id="sky-icon-container">
+            <i data-lucide="sun"></i>
+          </div>
+        </div>
+
+        <div class="card solar-card">
+          <h3><i data-lucide="sunrise"></i> Ciclo Solar del Día</h3>
+          <div class="solar-grid">
+            <div class="solar-item">
+              <span class="label">Amanecer</span>
+              <strong id="val-amanecer">--:--</strong>
+            </div>
+            <div class="solar-item">
+              <span class="label">Ocaso</span>
+              <strong id="val-ocaso">--:--</strong>
+            </div>
+            <div class="solar-item">
+              <span class="label">Duración Día</span>
+              <strong id="val-dur-dia">--</strong>
+            </div>
+            <div class="solar-item">
+              <span class="label">Duración Noche</span>
+              <strong id="val-dur-noche">--</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarjetas de Métricas Actuales -->
+      <div class="metrics-grid">
+        <div class="card metric-card temp">
+          <div class="metric-header">
+            <span>Temperatura</span>
+            <i data-lucide="thermometer"></i>
+          </div>
+          <div class="metric-value"><span id="val-temp">--</span><small>°C</small></div>
+          <div class="metric-sub">Sensación Térmica: <strong id="val-st">-- °C</strong></div>
+        </div>
+
+        <div class="card metric-card hum">
+          <div class="metric-header">
+            <span>Humedad Relativa</span>
+            <i data-lucide="droplets"></i>
+          </div>
+          <div class="metric-value"><span id="val-hum">--</span><small>%</small></div>
+          <div class="metric-sub">Punto de Rocío: <strong id="val-rocio">-- °C</strong></div>
+        </div>
+
+        <div class="card metric-card pres">
+          <div class="metric-header">
+            <span>Presión Atmosférica</span>
+            <i data-lucide="gauge"></i>
+          </div>
+          <div class="metric-value"><span id="val-pres">--</span><small>hPa</small></div>
+          <div class="metric-sub" id="pres-trend">Estable</div>
+        </div>
+
+        <div class="card metric-card luz">
+          <div class="metric-header">
+            <span>Luminosidad</span>
+            <i data-lucide="sun-medium"></i>
+          </div>
+          <div class="metric-value"><span id="val-luz">--</span><small>%</small></div>
+          <div class="metric-sub">Índice fotoeléctrico</div>
+        </div>
+      </div>
+
+      <!-- Gráficos de Evolución (Últimas 24 horas) -->
+      <div class="charts-grid">
+        <div class="card chart-card">
+          <h3>Temperatura y Sensación Térmica (Últimas 24 hs)</h3>
+          <div class="canvas-wrapper">
+            <canvas id="chart-temp-24h"></canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <h3>Humedad (%) y Luminosidad (%) (Últimas 24 hs)</h3>
+          <div class="canvas-wrapper">
+            <canvas id="chart-hum-luz-24h"></canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card full-width">
+          <h3>Barómetro - Presión Atmosférica (hPa - Últimas 24 hs)</h3>
+          <div class="canvas-wrapper">
+            <canvas id="chart-pres-24h"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= VISTA 2: HISTÓRICO Y ESTADÍSTICAS ================= -->
+    <section id="view-historico" class="view">
+      <div class="card controls-card">
+        <div class="control-group">
+          <label for="select-var">Variable Meteorológica</label>
+          <select id="select-var">
+            <option value="temp">Temperatura (°C)</option>
+            <option value="st">Sensación Térmica (°C)</option>
+            <option value="hum">Humedad Relativa (%)</option>
+            <option value="rocio">Punto de Rocío (°C)</option>
+            <option value="pres">Presión Atmosférica (hPa)</option>
+            <option value="luz">Luminosidad (%)</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label for="select-period">Período de Análisis</label>
+          <select id="select-period">
+            <option value="1">Últimas 24 horas</option>
+            <option value="7">Últimos 7 días (Semana)</option>
+            <option value="30" selected>Últimos 30 días (Mes)</option>
+            <option value="365">Último año</option>
+            <option value="all">Todo el historial</option>
+          </select>
+        </div>
+
+        <div class="control-info">
+          <span class="label">Muestras analizadas</span>
+          <strong id="stat-count">0 registros</strong>
+        </div>
+      </div>
+
+      <!-- Tarjetas de Estadísticas (Max, Min, Promedio, Mediana) -->
+      <div class="stats-grid">
+        <div class="card stat-card max">
+          <span class="stat-label"><i data-lucide="arrow-up-circle"></i> Valor Máximo</span>
+          <div class="stat-val" id="stat-max">--</div>
+          <span class="stat-time" id="stat-max-time">--</span>
+        </div>
+
+        <div class="card stat-card min">
+          <span class="stat-label"><i data-lucide="arrow-down-circle"></i> Valor Mínimo</span>
+          <div class="stat-val" id="stat-min">--</div>
+          <span class="stat-time" id="stat-min-time">--</span>
+        </div>
+
+        <div class="card stat-card avg">
+          <span class="stat-label"><i data-lucide="divide-circle"></i> Promedio (Media)</span>
+          <div class="stat-val" id="stat-avg">--</div>
+          <span class="stat-time">Media aritmética del período</span>
+        </div>
+
+        <div class="card stat-card med">
+          <span class="stat-label"><i data-lucide="align-center"></i> Mediana</span>
+          <div class="stat-val" id="stat-med">--</div>
+          <span class="stat-time">Valor central (Percentil 50)</span>
+        </div>
+      </div>
+
+      <!-- Gráfico Histórico Detallado -->
+      <div class="card chart-card">
+        <h3 id="hist-chart-title">Evolución Histórica</h3>
+        <div class="canvas-wrapper tall">
+          <canvas id="chart-historico"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Estación Climatológica Wilde ISD • Datos adquiridos automáticamente por nodo ESP8266
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
