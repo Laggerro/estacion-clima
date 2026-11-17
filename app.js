@@ -1,4 +1,4 @@
-// REEMPLAZÁ ESTA URL POR LA DE TU GOOGLE APPS SCRIPT IMPLEMENTADO
+
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSYNyQpOOjLdIgsXyUCfpI8I3yZIxtIPF6Gta2JBsch3OCaEKgWJ1RNQimsVy5SZ_9xQ/exec";
 
 let allRecords = [];
@@ -44,7 +44,7 @@ function setupHistoryControls() {
   document.getElementById("select-period").addEventListener("change", updateHistoryView);
 }
 
-async function loadWeatherData() {
+function loadWeatherData() {
   const banner = document.getElementById("status-banner");
   const refreshBtn = document.getElementById("btn-refresh");
   
@@ -52,43 +52,58 @@ async function loadWeatherData() {
   banner.innerHTML = `<span class="pulse"></span> Sincronizando datos con Google Sheets...`;
   refreshBtn.classList.add("spinning");
 
-  try {
-    if (APPS_SCRIPT_URL.includes("PEGAR_AQUI")) {
-      throw new Error("Falta configurar la URL del Google Apps Script en app.js");
-    }
-
-    const response = await fetch(APPS_SCRIPT_URL);
-    if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
-    
-    const rawData = await response.json();
-    
-    // Parsear timestamps para poder filtrar por fechas
-    allRecords = rawData.map(item => {
-  const ts = parseFechaArgentina(item.fecha, item.hora);
-  // shortLabel muestra "16/11 12:40"
-  const shortDate = item.fecha.includes("/") ? item.fecha.slice(0, 5) : `${item.fecha.slice(8, 10)}/${item.fecha.slice(5, 7)}`;
-  return {
-    ...item,
-    timestamp: isNaN(ts) ? Date.now() : ts,
-    shortLabel: `${shortDate} ${item.hora.slice(0, 5)}`
-  };
-});
-
-    if (allRecords.length === 0) {
-      throw new Error("La hoja no contiene registros todavía.");
-    }
-
-    banner.classList.add("hidden");
-    renderDashboard();
-    updateHistoryView();
-
-  } catch (err) {
+  if (APPS_SCRIPT_URL.includes("PEGAR_AQUI")) {
     banner.className = "status-banner error";
-    banner.textContent = `Aviso: ${err.message}`;
-  } finally {
+    banner.textContent = "Aviso: Falta configurar la URL del Google Apps Script en app.js";
     refreshBtn.classList.remove("spinning");
+    return;
   }
+
+  window.handleWeatherJSONP = function(rawData) {
+    try {
+      allRecords = rawData.map(item => {
+        const ts = parseFechaArgentina(item.fecha, item.hora);
+        const shortDate = item.fecha.includes("/") 
+          ? item.fecha.slice(0, 5) 
+          : `${item.fecha.slice(8, 10)}/${item.fecha.slice(5, 7)}`;
+        return {
+          ...item,
+          timestamp: isNaN(ts) ? Date.now() : ts,
+          shortLabel: `${shortDate} ${item.hora.slice(0, 5)}`
+        };
+      });
+
+      if (allRecords.length === 0) {
+        throw new Error("La hoja no contiene registros todavía.");
+      }
+
+      banner.classList.add("hidden");
+      renderDashboard();
+      updateHistoryView();
+    } catch (err) {
+      banner.className = "status-banner error";
+      banner.textContent = `Aviso: ${err.message}`;
+    } finally {
+      refreshBtn.classList.remove("spinning");
+      const oldScript = document.getElementById("jsonp-weather");
+      if (oldScript) oldScript.remove();
+    }
+  };
+
+  const oldScript = document.getElementById("jsonp-weather");
+  if (oldScript) oldScript.remove();
+
+  const script = document.createElement("script");
+  script.id = "jsonp-weather";
+  script.src = `${APPS_SCRIPT_URL}?callback=handleWeatherJSONP&t=${Date.now()}`;
+  script.onerror = function() {
+    banner.className = "status-banner error";
+    banner.textContent = "Aviso: No se pudo conectar con Google Apps Script.";
+    refreshBtn.classList.remove("spinning");
+  };
+  document.body.appendChild(script);
 }
+
 
 function parseFechaArgentina(fechaStr, horaStr) {
   // Soporta tanto "16/11/2026" como "2026-11-16"
