@@ -3,10 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Analizador Meteorológico Escolar - Arduino Uno</title>
-  <!-- Librerías para leer Excel y dibujar gráficos -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <title>Analizador Meteorológico Escolar Arduino Uno</title>
+  
+  <!-- Librerías (Si estás sin internet, descargalas y ponelas en la misma carpeta cambiando las rutas por "xlsx.full.min.js" y "chart.umd.min.js") -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script> 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script> 
+
+
+<!-- Versión local para cuando no hay internet -->
+<!-- <script src="xlsx.full.min.js"></script> -->
+<!-- <script src="chart.umd.min.js"></script> -->
+  
   <style>
     :root {
       --bg: #0f172a;
@@ -115,14 +122,6 @@
 
     .btn:hover { background: #475569; }
 
-    .btn-primary {
-      background: var(--accent);
-      color: #052e16;
-      border: none;
-    }
-
-    .btn-primary:hover { opacity: 0.9; }
-
     .controls-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -209,28 +208,12 @@
   <div class="container">
     <header>
       <div>
-        <h1>🌡️ Registro Meteorológico Escolar</h1>
-        <p class="subtitle">Análisis de Temperatura y Humedad desde planilla Excel (Lectura Display 16x2 - Arduino Uno)</p>
+        <h1>📊 Registro Meteorológico Educativo</h1>
+        <p class="subtitle">Análisis de Temperatura y Humedad desde planilla Excel</p>
       </div>
-      <button type="button" class="btn" id="btn-template">📥 Descargar Excel modelo</button>
     </header>
 
-    <!-- Paso 1: Carga de archivo -->
-    <div class="card">
-      <div class="upload-zone">
-        <div>
-          <label for="excel-input">1. Seleccioná tu archivo Excel (.xlsx, .xls o .csv)</label>
-          <input type="file" id="excel-input" accept=".xlsx, .xls, .csv">
-        </div>
-        <div style="font-size: 0.8rem; color: var(--muted); max-width: 340px;">
-          Columnas esperadas en la primera hoja:<br>
-          <strong style="color: var(--text);">Fecha</strong> | <strong style="color: var(--text);">Hora</strong> | <strong style="color: var(--text);">Temperatura</strong> | <strong style="color: var(--text);">Humedad</strong>
-        </div>
-      </div>
-      <div id="status-msg" class="status-msg">Esperando archivo Excel para graficar...</div>
-    </div>
-
-    <!-- Paso 2: Controles y Gráfico (se muestra al cargar un archivo válido) -->
+    <!-- Controles y Gráfico (Arriba, tal como lo estructuraste) -->
     <div id="analysis-section" class="hidden">
       <div class="card">
         <div class="controls-grid">
@@ -245,18 +228,18 @@
           <div>
             <label>Atajos de rango</label>
             <div class="quick-btns">
-              <button type="button" class="btn" id="btn-all">Todo el archivo</button>
-              <button type="button" class="btn" id="btn-24h">Últimas 24 hs</button>
-              <button type="button" class="btn" id="btn-6h">Últimas 6 hs</button>
+              <button type="button" class="btn" id="btn-all">Todo</button>
+              <button type="button" class="btn" id="btn-24h">24 hs</button>
+              <button type="button" class="btn" id="btn-6h">6 hs</button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Resumen estadístico del rango seleccionado -->
+      <!-- Resumen estadístico -->
       <div class="stats-grid">
         <div class="stat-box">
-          <div class="stat-title">Muestras en rango</div>
+          <div class="stat-title">Muestras</div>
           <div class="stat-val" id="st-count">0</div>
         </div>
         <div class="stat-box">
@@ -283,6 +266,22 @@
           <canvas id="weather-chart"></canvas>
         </div>
       </div>
+    </div>
+
+    <!-- Zona de carga de archivo (Abajo) -->
+    <div class="card">
+      <div class="upload-zone">
+        <div>
+          <label for="excel-input">1. Seleccioná tu archivo Excel (.xlsx, .xls o .csv)</label>
+          <input type="file" id="excel-input" accept=".xlsx, .xls, .csv">
+        </div>
+        <button type="button" class="btn" id="btn-template">📥 Descargar Excel modelo</button>
+        <div style="font-size: 0.8rem; color: var(--muted); max-width: 340px;">
+          Columnas esperadas en la primera hoja:<br>
+          <strong style="color: var(--text);">Fecha</strong> | <strong style="color: var(--text);">Hora</strong> | <strong style="color: var(--text);">Temperatura</strong> | <strong style="color: var(--text);">Humedad</strong>
+        </div>
+      </div>
+      <div id="status-msg" class="status-msg">Esperando archivo Excel para graficar...</div>
     </div>
   </div>
 
@@ -327,14 +326,13 @@
             throw new Error("No se encontraron filas válidas con Fecha, Hora, Temperatura y Humedad.");
           }
 
-          // Ordenar cronológicamente
           allRecords.sort((a, b) => a.timestamp - b.timestamp);
 
           statusMsg.className = "status-msg ok";
           statusMsg.textContent = `Archivo "${file.name}" cargado correctamente (${allRecords.length} mediciones).`;
 
           analysisSection.classList.remove("hidden");
-          setRangeHours(null); // Mostrar todo por defecto
+          setRangeHours(null);
         } catch (err) {
           statusMsg.className = "status-msg error";
           statusMsg.textContent = "Error al leer el archivo: " + err.message;
@@ -346,9 +344,7 @@
 
     function parseRows(rows) {
       const parsed = [];
-
       for (const row of rows) {
-        // Buscar columnas ignorando mayúsculas/tildes
         const keys = Object.keys(row);
         const kFecha = keys.find(k => k.toLowerCase().includes("fecha"));
         const kHora  = keys.find(k => k.toLowerCase().includes("hora"));
@@ -377,7 +373,6 @@
     function buildDateTime(rawFecha, rawHora) {
       let year, month, day, hours = 0, minutes = 0;
 
-      // 1. Extraer Fecha
       if (rawFecha instanceof Date) {
         year = rawFecha.getFullYear();
         month = rawFecha.getMonth();
@@ -400,12 +395,10 @@
         }
       }
 
-      // 2. Extraer Hora
       if (rawHora instanceof Date) {
         hours = rawHora.getHours();
         minutes = rawHora.getMinutes();
       } else if (typeof rawHora === "number") {
-        // Fracción de día en Excel (ej. 0.5 = 12:00)
         const totalMins = Math.round(rawHora * 24 * 60);
         hours = Math.floor(totalMins / 60) % 24;
         minutes = totalMins % 60;
@@ -571,7 +564,6 @@
       });
     }
 
-    // Genera un archivo .xlsx de ejemplo para entregar a los alumnos
     function downloadSampleExcel() {
       const sampleData = [
         { Fecha: "17/11/2026", Hora: "08:00", Temperatura: 19.4, Humedad: 74 },
