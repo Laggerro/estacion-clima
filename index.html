@@ -207,6 +207,56 @@
           <canvas id="chart-historico"></canvas>
         </div>
       </div>
+      <div class="card chart-card" style="margin-top: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;">
+    <h3 style="margin: 0;">Correlación Multivariable (4 Ejes Independientes)</h3>
+    <div style="display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem; color: var(--text-muted, #94a3b8);">
+      <span>Clic en la leyenda para ocultar/mostrar variables</span>
+      <button id="btn-reset-scales" type="button" class="btn-secondary" style="padding: 4px 10px; font-size: 0.8rem; cursor: pointer;">
+        Auto-escala
+      </button>
+    </div>
+  </div>
+
+  <!-- Controles rápidos para ajustar escala manual de cada variable si querés hacer zoom -->
+  <div id="multi-scale-controls" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.5rem; margin-bottom: 1rem; font-size: 0.8rem;">
+    <div style="background: rgba(251, 113, 133, 0.08); border: 1px solid rgba(251, 113, 133, 0.3); padding: 6px 8px; border-radius: 6px;">
+      <strong style="color: #fb7185;">Temp (°C)</strong>
+      <div style="display: flex; gap: 4px; margin-top: 4px;">
+        <input type="number" id="min-temp" placeholder="Mín" step="1" style="width: 50%; padding: 2px 4px; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;">
+        <input type="number" id="max-temp" placeholder="Máx" step="1" style="width: 50%; padding: 2px 4px; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;">
+      </div>
+    </div>
+
+    <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.3); padding: 6px 8px; border-radius: 6px;">
+      <strong style="color: #38bdf8;">Humedad (%)</strong>
+      <div style="display: flex; gap: 4px; margin-top: 4px;">
+        <input type="number" id="min-hum" placeholder="0" step="5" style="width: 50%; padding: 2px 4px; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;">
+        <input type="number" id="max-hum" placeholder="100" step="5" style="width: 50%; padding: 2px 4px; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;">
+      </div>
+    </div>
+
+    <div style="background: rgba(167, 139, 250, 0.08); border: 1px solid rgba(167, 139, 250, 0.3); padding: 6px 8px; border-radius: 6px;">
+      <strong style="color: #a78bfa;">Presión (hPa)</strong>
+      <div style="display: flex; gap: 4px; margin-top: 4px;">
+        <input type="number" id="min-pres" placeholder="Mín" step="1" style="width: 50%; padding: 2px 4px; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;">
+        <input type="number" id="max-pres" placeholder="Máx" step="1" style="width: 50%; padding: 2px 4px; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;">
+      </div>
+    </div>
+
+    <div style="background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.3); padding: 6px 8px; border-radius: 6px;">
+      <strong style="color: #fbbf24;">Luz (lx)</strong>
+      <div style="display: flex; gap: 4px; margin-top: 4px;">
+        <input type="number" id="min-luz" placeholder="0" step="100" style="width: 50%; padding: 2px 4px; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;">
+        <input type="number" id="max-luz" placeholder="Máx" step="500" style="width: 50%; padding: 2px 4px; background: #0f172a; color: #fff; border: 1px solid #334155; border-radius: 4px;">
+      </div>
+    </div>
+  </div>
+
+  <div style="position: relative; height: 360px; width: 100%;">
+    <canvas id="chart-correlacion-4vars"></canvas>
+  </div>
+</div>
     </section>
   </main>
 

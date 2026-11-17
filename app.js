@@ -42,6 +42,23 @@ function setupNavigation() {
 function setupHistoryControls() {
   document.getElementById("select-var").addEventListener("change", updateHistoryView);
   document.getElementById("select-period").addEventListener("change", updateHistoryView);
+
+  const scaleInputs = ["min-temp", "max-temp", "min-hum", "max-hum", "min-pres", "max-pres", "min-luz", "max-luz"];
+  scaleInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", updateHistoryView);
+  });
+
+  const resetBtn = document.getElementById("btn-reset-scales");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      scaleInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+      updateHistoryView();
+    });
+  }
 }
 
 function loadWeatherData() {
@@ -302,14 +319,18 @@ function updateHistoryView() {
   document.getElementById("hist-chart-title").textContent = `${meta.label} (${meta.unit}) - Evolución del período`;
 
   renderLineChart("chart-historico", sampled.map(r => r.shortLabel), [
+    
     {
+      
       label: `${meta.label} (${meta.unit})`,
       data: sampled.map(r => r[variable]),
       borderColor: meta.color,
       backgroundColor: meta.color + "22",
       fill: true
     }
+    
   ]);
+  renderMultiCorrelationChart(sampled);
 }
 
 function renderLineChart(canvasId, labels, datasets) {
@@ -366,6 +387,141 @@ function renderLineChart(canvasId, labels, datasets) {
         }
       },
       scales: scalesConfig
+    }
+  });
+}
+function renderMultiCorrelationChart(records) {
+  const canvas = document.getElementById("chart-correlacion-4vars");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  if (charts["chart-correlacion-4vars"]) {
+    charts["chart-correlacion-4vars"].destroy();
+  }
+
+  const getVal = (id) => {
+    const el = document.getElementById(id);
+    if (!el || el.value === "") return undefined;
+    const n = parseFloat(el.value);
+    return isNaN(n) ? undefined : n;
+  };
+
+  const labels = records.map(r => r.shortLabel);
+
+  charts["chart-correlacion-4vars"] = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Temperatura (°C)",
+          data: records.map(r => r.temp),
+          borderColor: "#fb7185",
+          backgroundColor: "rgba(251, 113, 133, 0.1)",
+          yAxisID: "yTemp",
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3
+        },
+        {
+          label: "Humedad (%)",
+          data: records.map(r => r.hum),
+          borderColor: "#38bdf8",
+          backgroundColor: "rgba(56, 189, 248, 0.1)",
+          yAxisID: "yHum",
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3
+        },
+        {
+          label: "Presión (hPa)",
+          data: records.map(r => r.pres),
+          borderColor: "#a78bfa",
+          backgroundColor: "rgba(167, 139, 250, 0.1)",
+          yAxisID: "yPres",
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3
+        },
+        {
+          label: "Luminosidad (lx)",
+          data: records.map(r => r.luz),
+          borderColor: "#fbbf24",
+          backgroundColor: "rgba(251, 191, 36, 0.1)",
+          yAxisID: "yLuz",
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          tension: 0.3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: "#e2e8f0", boxWidth: 12 },
+          onClick: (e, legendItem, legend) => {
+            // Comportamiento estándar de ocultar/mostrar línea
+            Chart.defaults.plugins.legend.onClick(e, legendItem, legend);
+            // Ocultar también su eje Y correspondiente para limpiar la vista
+            const ci = legend.chart;
+            const axisMap = ["yTemp", "yHum", "yPres", "yLuz"];
+            const axisId = axisMap[legendItem.datasetIndex];
+            if (axisId && ci.options.scales[axisId]) {
+              ci.options.scales[axisId].display = ci.isDatasetVisible(legendItem.datasetIndex);
+              ci.update();
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: "#64748b", maxTicksLimit: 10 },
+          grid: { color: "rgba(35, 47, 75, 0.5)" }
+        },
+        yTemp: {
+          type: "linear",
+          position: "left",
+          min: getVal("min-temp"),
+          max: getVal("max-temp"),
+          ticks: { color: "#fb7185" },
+          title: { display: true, text: "°C", color: "#fb7185" },
+          grid: { color: "rgba(35, 47, 75, 0.4)" }
+        },
+        yHum: {
+          type: "linear",
+          position: "left",
+          min: getVal("min-hum"),
+          max: getVal("max-hum"),
+          ticks: { color: "#38bdf8" },
+          title: { display: true, text: "%", color: "#38bdf8" },
+          grid: { drawOnChartArea: false }
+        },
+        yPres: {
+          type: "linear",
+          position: "right",
+          min: getVal("min-pres"),
+          max: getVal("max-pres"),
+          ticks: { color: "#a78bfa" },
+          title: { display: true, text: "hPa", color: "#a78bfa" },
+          grid: { drawOnChartArea: false }
+        },
+        yLuz: {
+          type: "linear",
+          position: "right",
+          min: getVal("min-luz"),
+          max: getVal("max-luz"),
+          ticks: { color: "#fbbf24" },
+          title: { display: true, text: "lx", color: "#fbbf24" },
+          grid: { drawOnChartArea: false }
+        }
+      }
     }
   });
 }
