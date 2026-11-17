@@ -10,7 +10,7 @@ const VAR_META = {
   hum: { label: "Humedad Relativa", unit: "%", color: "#38bdf8" },
   rocio: { label: "Punto de Rocío", unit: "°C", color: "#2dd4bf" },
   pres: { label: "Presión Atmosférica", unit: "hPa", color: "#a78bfa" },
-  luz: { label: "Luminosidad", unit: "%", color: "#fbbf24" }
+  luz: { label: "Luminosidad", unit: "lx", color: "#fbbf24" }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -181,7 +181,7 @@ function renderDashboard() {
       fill: true
     },
     {
-      label: "Luminosidad (%)",
+      label: "Luminosidad (lx)",
       data: last24h.map(r => r.luz),
       borderColor: "#fbbf24",
       fill: false
