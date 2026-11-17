@@ -186,20 +186,22 @@ function renderDashboard() {
     }
   ]);
 
-  // Gráfico 2: Humedad y Luminosidad
+// Gráfico 2: Humedad y Luminosidad (con Doble Eje Y)
   renderLineChart("chart-hum-luz-24h", labels, [
     {
       label: "Humedad (%)",
       data: last24h.map(r => r.hum),
       borderColor: "#38bdf8",
       backgroundColor: "rgba(56, 189, 248, 0.1)",
-      fill: true
+      fill: true,
+      yAxisID: "y"
     },
     {
       label: "Luminosidad (lx)",
       data: last24h.map(r => r.luz),
       borderColor: "#fbbf24",
-      fill: false
+      fill: false,
+      yAxisID: "y1"
     }
   ]);
 
@@ -317,6 +319,8 @@ function renderLineChart(canvasId, labels, datasets) {
     charts[canvasId].destroy();
   }
 
+  const hasSecondAxis = datasets.some(ds => ds.yAxisID === "y1");
+
   const formattedDatasets = datasets.map(ds => ({
     ...ds,
     borderWidth: 2,
@@ -324,6 +328,30 @@ function renderLineChart(canvasId, labels, datasets) {
     pointHoverRadius: 4,
     tension: 0.3
   }));
+
+  const scalesConfig = {
+    x: {
+      ticks: { color: "#64748b", maxTicksLimit: 10 },
+      grid: { color: "rgba(35, 47, 75, 0.5)" }
+    },
+    y: {
+      type: "linear",
+      display: true,
+      position: "left",
+      ticks: { color: hasSecondAxis ? "#38bdf8" : "#64748b" },
+      grid: { color: "rgba(35, 47, 75, 0.5)" }
+    }
+  };
+
+  if (hasSecondAxis) {
+    scalesConfig.y1 = {
+      type: "linear",
+      display: true,
+      position: "right",
+      ticks: { color: "#fbbf24" },
+      grid: { drawOnChartArea: false } // Evita que se crucen dos grillas distintas
+    };
+  }
 
   charts[canvasId] = new Chart(ctx, {
     type: "line",
@@ -337,16 +365,7 @@ function renderLineChart(canvasId, labels, datasets) {
           labels: { color: "#94a3b8", boxWidth: 12 }
         }
       },
-      scales: {
-        x: {
-          ticks: { color: "#64748b", maxTicksLimit: 10 },
-          grid: { color: "rgba(35, 47, 75, 0.5)" }
-        },
-        y: {
-          ticks: { color: "#64748b" },
-          grid: { color: "rgba(35, 47, 75, 0.5)" }
-        }
-      }
+      scales: scalesConfig
     }
   });
 }
