@@ -4,6 +4,7 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSYNyQpOOjLdIg
 let allRecords = [];
 let charts = {};
 let maxLux = 100000;
+const LUMINOSITY_GAMMA = 0.43;
 
 const VAR_META = {
   temp: { label: "Temperatura", unit: "°C", color: "#fb7185" },
@@ -182,7 +183,8 @@ function toLuminosityPercent(lux) {
   if (lux === "" || lux === null || lux === undefined || !Number.isFinite(value)) {
     throw new Error("La hoja contiene una lectura de luminosidad no válida.");
   }
-  return Math.min(100, Math.max(0, (value / maxLux) * 100));
+  const normalizedLux = Math.max(0, value / maxLux);
+  return Math.min(100, Math.pow(normalizedLux, LUMINOSITY_GAMMA) * 100);
 }
 
 function loadWeatherData() {
@@ -294,7 +296,7 @@ function renderDashboard() {
   document.getElementById("val-hum").textContent = latest.hum.toFixed(1);
   document.getElementById("val-rocio").textContent = `${latest.rocio.toFixed(1)} °C`;
   document.getElementById("val-pres").textContent = latest.pres.toFixed(1);
-  document.getElementById("val-luz").textContent = Math.round(toLuminosityPercent(latest.luz));
+  document.getElementById("val-luz").textContent = toLuminosityPercent(latest.luz).toFixed(1);
 
   // Tendencia barométrica (comparando con hace 3 horas = ~36 registros de 5 min)
   const idx3h = Math.max(0, allRecords.length - 37);

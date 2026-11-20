@@ -115,7 +115,7 @@
             <i data-lucide="sun-medium"></i>
           </div>
           <div class="metric-value"><span id="val-luz">--</span><small>%</small></div>
-          <div class="metric-sub">Del máximo de referencia</div>
+          <div class="metric-sub">Escala no lineal; máx. de referencia</div>
         </div>
       </div>
 
@@ -265,7 +265,7 @@
     <section id="view-configuracion" class="view">
       <div class="card settings-card">
         <h2>Configuración de luminosidad</h2>
-        <p>Definí cuántos lux representan el 100% para la visualización de la estación. Como referencia inicial, un día soleado de verano al mediodía puede rondar los 100.000 lx.</p>
+        <p>Definí cuántos lux representan el 100% para la visualización. Los valores se transforman con una curva de potencia (gamma 0,43) para que los niveles bajos sean visibles; es un índice visual, no una proporción física directa de lux. Como referencia inicial, un día soleado de verano al mediodía puede rondar los 100.000 lx.</p>
         <form id="config-form">
           <label for="max-lux-reference">Máximo de referencia (lx)</label>
           <div class="settings-input-row">
@@ -274,7 +274,7 @@
           </div>
           <span id="config-feedback" class="form-message" role="status" aria-live="polite"></span>
         </form>
-        <p class="settings-note">Este valor se guarda en la pestaña Configuracion, celda F2. Las lecturas originales en lux no se modifican.</p>
+        <p class="settings-note">Con la referencia de 100.000 lx, una lectura de 184 lx equivale aproximadamente a 6,7% en esta escala. Este valor se guarda en Configuracion!F2; las lecturas originales en lux no se modifican.</p>
       </div>
     </section>
   </main>
