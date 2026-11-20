@@ -371,6 +371,81 @@ select:focus {
   border-color: var(--accent-blue);
 }
 
+.settings-card {
+  max-width: 680px;
+}
+
+.settings-card h2 {
+  font-size: 1.15rem;
+  margin-bottom: 0.5rem;
+}
+
+.settings-card > p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+.settings-card form label {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 0.4rem;
+}
+
+.settings-input-row {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.settings-input-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 0.65rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.settings-input-row input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.btn-secondary {
+  background: var(--accent-blue);
+  color: var(--bg-main);
+  border: 1px solid var(--accent-blue);
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  filter: brightness(1.1);
+}
+
+.form-message {
+  display: block;
+  min-height: 1.25rem;
+  margin-top: 0.5rem;
+  color: var(--accent-green);
+  font-size: 0.82rem;
+}
+
+.form-message.error {
+  color: var(--accent-temp);
+}
+
+.settings-card .settings-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+}
+
 .control-info {
   margin-left: auto;
   text-align: right;

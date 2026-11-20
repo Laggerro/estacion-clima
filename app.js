@@ -3,6 +3,7 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSYNyQpOOjLdIg
 
 let allRecords = [];
 let charts = {};
+let maxLux = 100000;
 
 const VAR_META = {
   temp: { label: "Temperatura", unit: "°C", color: "#fb7185" },
@@ -10,13 +11,15 @@ const VAR_META = {
   hum: { label: "Humedad Relativa", unit: "%", color: "#38bdf8" },
   rocio: { label: "Punto de Rocío", unit: "°C", color: "#2dd4bf" },
   pres: { label: "Presión Atmosférica", unit: "hPa", color: "#a78bfa" },
-  luz: { label: "Luminosidad", unit: "lx", color: "#fbbf24" }
+  luz: { label: "Luminosidad", unit: "%", color: "#fbbf24" }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
   lucide.createIcons();
   setupNavigation();
   setupHistoryControls();
+  setupConfiguration();
+  loadMaxLux();
   loadWeatherData();
 
   // Auto-refresco cada 5 minutos
@@ -59,6 +62,127 @@ function setupHistoryControls() {
       updateHistoryView();
     });
   }
+}
+
+function setupConfiguration() {
+  const maxLuxInput = document.getElementById("max-lux-reference");
+  maxLuxInput.value = maxLux;
+  document.getElementById("config-form").addEventListener("submit", event => {
+    event.preventDefault();
+    const newMaxLux = Number(maxLuxInput.value);
+    const feedback = document.getElementById("config-feedback");
+    const saveButton = document.querySelector("#config-form button[type='submit']");
+
+    if (!Number.isFinite(newMaxLux) || newMaxLux <= 0) {
+      feedback.textContent = "Ingresá un máximo de lux mayor que cero.";
+      feedback.classList.add("error");
+      return;
+    }
+
+    feedback.textContent = "Guardando en Google Sheets...";
+    feedback.classList.remove("error");
+    saveButton.disabled = true;
+
+    requestMaxLux("guardarMaxLux", newMaxLux, "handleMaxLuxSaveJSONP", response => {
+      try {
+        maxLux = parseMaxLuxResponse(response);
+        maxLuxInput.value = maxLux;
+        feedback.textContent = "Máximo de luminosidad guardado en Google Sheets.";
+        if (allRecords.length > 0) renderDashboard();
+        updateHistoryView();
+      } catch (error) {
+        feedback.textContent = error.message;
+        feedback.classList.add("error");
+      } finally {
+        saveButton.disabled = false;
+      }
+    }, error => {
+      feedback.textContent = error.message;
+      feedback.classList.add("error");
+      saveButton.disabled = false;
+    });
+  });
+}
+
+function loadMaxLux() {
+  const feedback = document.getElementById("config-feedback");
+
+  requestMaxLux("obtenerMaxLux", null, "handleMaxLuxJSONP", response => {
+    try {
+      maxLux = parseMaxLuxResponse(response);
+      document.getElementById("max-lux-reference").value = maxLux;
+      feedback.textContent = "Máximo cargado desde Google Sheets.";
+      feedback.classList.remove("error");
+      if (allRecords.length > 0) renderDashboard();
+      updateHistoryView();
+    } catch (error) {
+      feedback.textContent = error.message;
+      feedback.classList.add("error");
+    }
+  }, error => {
+    feedback.textContent = error.message;
+    feedback.classList.add("error");
+  });
+}
+
+function parseMaxLuxResponse(response) {
+  if (!response || response.status !== "success") {
+    throw new Error(response && response.message
+      ? response.message
+      : "Google Sheets no devolvió una configuración válida.");
+  }
+
+  const value = Number(response.maxLux);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error("El máximo de lux guardado en Google Sheets no es válido.");
+  }
+
+  return value;
+}
+
+function requestMaxLux(action, value, callbackName, onSuccess, onError) {
+  const scriptId = `jsonp-${callbackName}`;
+  const previousScript = document.getElementById(scriptId);
+  if (previousScript) previousScript.remove();
+
+  const script = document.createElement("script");
+  script.id = scriptId;
+  const url = new URL(APPS_SCRIPT_URL);
+  url.searchParams.set("action", action);
+  url.searchParams.set("callback", callbackName);
+  url.searchParams.set("t", String(Date.now()));
+  if (value !== null) url.searchParams.set("maxLux", String(value));
+
+  let timeoutId;
+  const cleanup = () => {
+    clearTimeout(timeoutId);
+    delete window[callbackName];
+    script.remove();
+  };
+
+  window[callbackName] = response => {
+    cleanup();
+    onSuccess(response);
+  };
+  script.onerror = () => {
+    cleanup();
+    onError(new Error("No se pudo comunicar con la configuración de Google Sheets."));
+  };
+  timeoutId = setTimeout(() => {
+    cleanup();
+    onError(new Error("Google Sheets no respondió al pedido de configuración."));
+  }, 15000);
+
+  script.src = url.toString();
+  document.body.appendChild(script);
+}
+
+function toLuminosityPercent(lux) {
+  const value = Number(lux);
+  if (lux === "" || lux === null || lux === undefined || !Number.isFinite(value)) {
+    throw new Error("La hoja contiene una lectura de luminosidad no válida.");
+  }
+  return Math.min(100, Math.max(0, (value / maxLux) * 100));
 }
 
 function loadWeatherData() {
@@ -170,7 +294,7 @@ function renderDashboard() {
   document.getElementById("val-hum").textContent = latest.hum.toFixed(1);
   document.getElementById("val-rocio").textContent = `${latest.rocio.toFixed(1)} °C`;
   document.getElementById("val-pres").textContent = latest.pres.toFixed(1);
-  document.getElementById("val-luz").textContent = Math.round(latest.luz);
+  document.getElementById("val-luz").textContent = Math.round(toLuminosityPercent(latest.luz));
 
   // Tendencia barométrica (comparando con hace 3 horas = ~36 registros de 5 min)
   const idx3h = Math.max(0, allRecords.length - 37);
@@ -214,8 +338,8 @@ function renderDashboard() {
       yAxisID: "y"
     },
     {
-      label: "Luminosidad (lx)",
-      data: last24h.map(r => r.luz),
+      label: "Luminosidad (%)",
+      data: last24h.map(r => toLuminosityPercent(r.luz)),
       borderColor: "#fbbf24",
       fill: false,
       yAxisID: "y1"
@@ -288,9 +412,11 @@ function updateHistoryView() {
   const values = [];
 
   for (const r of filtered) {
-    const v = r[variable];
-    if (v > maxRec[variable]) maxRec = r;
-    if (v < minRec[variable]) minRec = r;
+    const v = variable === "luz" ? toLuminosityPercent(r[variable]) : r[variable];
+    const maxValue = variable === "luz" ? toLuminosityPercent(maxRec[variable]) : maxRec[variable];
+    const minValue = variable === "luz" ? toLuminosityPercent(minRec[variable]) : minRec[variable];
+    if (v > maxValue) maxRec = r;
+    if (v < minValue) minRec = r;
     sum += v;
     values.push(v);
   }
@@ -302,10 +428,12 @@ function updateHistoryView() {
 
   const fmt = (num) => `${num.toFixed(1)} ${meta.unit}`;
 
-  document.getElementById("stat-max").textContent = fmt(maxRec[variable]);
+  const maxValue = variable === "luz" ? toLuminosityPercent(maxRec[variable]) : maxRec[variable];
+  const minValue = variable === "luz" ? toLuminosityPercent(minRec[variable]) : minRec[variable];
+  document.getElementById("stat-max").textContent = fmt(maxValue);
   document.getElementById("stat-max-time").textContent = `${maxRec.fecha} a las ${maxRec.hora.slice(0, 5)}`;
 
-  document.getElementById("stat-min").textContent = fmt(minRec[variable]);
+  document.getElementById("stat-min").textContent = fmt(minValue);
   document.getElementById("stat-min-time").textContent = `${minRec.fecha} a las ${minRec.hora.slice(0, 5)}`;
 
   document.getElementById("stat-avg").textContent = fmt(avg);
@@ -323,7 +451,7 @@ function updateHistoryView() {
     {
       
       label: `${meta.label} (${meta.unit})`,
-      data: sampled.map(r => r[variable]),
+      data: sampled.map(r => variable === "luz" ? toLuminosityPercent(r[variable]) : r[variable]),
       borderColor: meta.color,
       backgroundColor: meta.color + "22",
       fill: true
@@ -369,6 +497,8 @@ function renderLineChart(canvasId, labels, datasets) {
       type: "linear",
       display: true,
       position: "right",
+      min: 0,
+      max: 100,
       ticks: { color: "#fbbf24" },
       grid: { drawOnChartArea: false } // Evita que se crucen dos grillas distintas
     };
@@ -447,8 +577,8 @@ function renderMultiCorrelationChart(records) {
           tension: 0.3
         },
         {
-          label: "Luminosidad (lx)",
-          data: records.map(r => r.luz),
+          label: "Luminosidad (%)",
+          data: records.map(r => toLuminosityPercent(r.luz)),
           borderColor: "#fbbf24",
           backgroundColor: "rgba(251, 191, 36, 0.1)",
           yAxisID: "yLuz",
@@ -515,10 +645,10 @@ function renderMultiCorrelationChart(records) {
         yLuz: {
           type: "linear",
           position: "right",
-          min: getVal("min-luz"),
-          max: getVal("max-luz"),
+          min: getVal("min-luz") === undefined ? 0 : getVal("min-luz"),
+          max: getVal("max-luz") === undefined ? 100 : getVal("max-luz"),
           ticks: { color: "#fbbf24" },
-          title: { display: true, text: "lx", color: "#fbbf24" },
+          title: { display: true, text: "%", color: "#fbbf24" },
           grid: { drawOnChartArea: false }
         }
       }
