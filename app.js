@@ -21,10 +21,12 @@ document.addEventListener("DOMContentLoaded", () => {
   setupHistoryControls();
   setupConfiguration();
   loadMaxLux();
+  loadSamplingInterval();
   loadWeatherData();
 
   // Auto-refresco cada 5 minutos
   setInterval(loadWeatherData, 5 * 60 * 1000);
+  setInterval(loadSamplingInterval, 60 * 1000);
 });
 
 function setupNavigation() {
@@ -124,6 +126,71 @@ function loadMaxLux() {
     feedback.textContent = error.message;
     feedback.classList.add("error");
   });
+}
+
+function loadSamplingInterval() {
+  const label = document.getElementById("sampling-interval-label");
+  if (!label) return;
+
+  requestSamplingConfig(response => {
+    if (!response || response.status !== "success") {
+      label.textContent = "no disponible";
+      return;
+    }
+
+    const minutes = Number(response.intervaloMinutos);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
+      label.textContent = "no disponible";
+      return;
+    }
+
+    label.textContent = `${minutes} min`;
+    const status = document.getElementById("sampling-config-status");
+    if (status) {
+      status.textContent = `Intervalo configurado en Google Sheets: ${minutes} minuto(s). El ESP8266 consulta cambios aproximadamente cada minuto.`;
+    }
+  }, () => {
+    label.textContent = "no disponible";
+    const status = document.getElementById("sampling-config-status");
+    if (status) status.textContent = "No se pudo consultar la configuración de muestreo en Google Sheets.";
+  });
+}
+
+function requestSamplingConfig(onSuccess, onError) {
+  const callbackName = "handleSamplingConfigJSONP";
+  const scriptId = `jsonp-${callbackName}`;
+  const previousScript = document.getElementById(scriptId);
+  if (previousScript) previousScript.remove();
+
+  const script = document.createElement("script");
+  script.id = scriptId;
+  const url = new URL(APPS_SCRIPT_URL);
+  url.searchParams.set("action", "obtenerControl");
+  url.searchParams.set("callback", callbackName);
+  url.searchParams.set("t", String(Date.now()));
+
+  let timeoutId;
+  const cleanup = () => {
+    clearTimeout(timeoutId);
+    delete window[callbackName];
+    script.remove();
+  };
+
+  window[callbackName] = response => {
+    cleanup();
+    onSuccess(response);
+  };
+  script.onerror = () => {
+    cleanup();
+    onError(new Error("No se pudo consultar Google Sheets."));
+  };
+  timeoutId = setTimeout(() => {
+    cleanup();
+    onError(new Error("Google Sheets no respondió a la consulta de configuración."));
+  }, 15000);
+
+  script.src = url.toString();
+  document.body.appendChild(script);
 }
 
 function parseMaxLuxResponse(response) {

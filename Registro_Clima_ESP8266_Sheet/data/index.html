@@ -80,15 +80,14 @@
       </div>
 
       <div class="card">
-        <div class="label" style="margin-bottom: 8px;">Intervalo de Reporte</div>
+        <div class="label" style="margin-bottom: 8px;">Intervalo de Muestreo</div>
         <div style="font-size: 0.85rem; margin-bottom: 12px; color: var(--muted);">
           Frecuencia actual: <strong id="lbl-intervalo" style="color: var(--accent);">--</strong> min
         </div>
-        <form onsubmit="guardarIntervalo(event)">
-          <label style="font-size:0.85rem;">Nuevo intervalo (en minutos)</label>
-          <input type="number" id="minutos" min="1" max="1440" required placeholder="Ej: 15">
-          <button type="submit">Guardar Intervalo y Reiniciar</button>
-        </form>
+        <div style="font-size: 0.85rem; margin-bottom: 12px; color: var(--muted);">
+          Modificá el intervalo en la pestaña Control de Google Sheets. El ESP8266 consulta cambios cada minuto.
+        </div>
+        <button type="button" class="btn-sec" onclick="reiniciarEquipo()">Reiniciar ESP8266</button>
       </div>
     </div>
   </div>
@@ -159,21 +158,14 @@
       alert('Credenciales guardadas. El ESP8266 se está reiniciando...');
     }
 
-    async function guardarIntervalo(e) {
-      e.preventDefault();
-      const mins = document.getElementById('minutos').value;
-      if (!confirm(`¿Cambiar el envío automático a cada ${mins} minuto(s) y reiniciar el equipo?`)) return;
-
-      const res = await fetch('/api/intervalo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `minutos=${encodeURIComponent(mins)}`
-      });
-
-      if (res.ok) {
-        alert('Intervalo guardado. El ESP8266 se está reiniciando...');
-      } else {
-        alert('Error al guardar el intervalo (debe ser entre 1 y 1440 minutos).');
+    async function reiniciarEquipo() {
+      if (!confirm('¿Reiniciar el ESP8266 ahora?')) return;
+      try {
+        const res = await fetch('/api/restart', { method: 'POST' });
+        if (!res.ok) throw new Error('El dispositivo rechazó el reinicio.');
+        alert('El ESP8266 se está reiniciando...');
+      } catch (error) {
+        alert(`No se pudo solicitar el reinicio: ${error.message}`);
       }
     }
 

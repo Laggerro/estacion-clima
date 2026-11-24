@@ -5,6 +5,12 @@ function doGet(e) {
   if (action === "obtenerMaxLux" || action === "guardarMaxLux") {
     return procesarConfiguracionMaxLux(e);
   }
+  if (action === "obtenerControl") {
+    return obtenerConfiguracionControl(e);
+  }
+  if (action === "confirmarReinicio") {
+    return confirmarReinicio(e);
+  }
 
   if (e && e.parameter && Object.keys(e.parameter).length > 0 && !e.parameter.callback) {
     return procesarPeticion(e);
@@ -14,6 +20,85 @@ function doGet(e) {
 
 function doPost(e) {
   return procesarPeticion(e);
+}
+
+function obtenerConfiguracionControl(e) {
+  var callback = e && e.parameter ? e.parameter.callback : "";
+
+  try {
+    var sheet = obtenerHojaControl();
+    var minutos = Number(sheet.getRange("B1").getValue());
+    if (!Number.isInteger(minutos) || minutos < 1 || minutos > 1440) {
+      throw new Error("Control!B1 debe ser un número entero entre 1 y 1440.");
+    }
+
+    var reinicioSolicitado = sheet.getRange("B2").getValue() === true;
+    if (e && e.parameter && e.parameter.formato === "plano") {
+      return ContentService.createTextOutput(minutos + "|" + (reinicioSolicitado ? "1" : "0"))
+        .setMimeType(ContentService.MimeType.TEXT);
+    }
+
+    return responderConfiguracion({
+      status: "success",
+      intervaloMinutos: minutos,
+      reinicioSolicitado: reinicioSolicitado
+    }, callback);
+  } catch (err) {
+    if (e && e.parameter && e.parameter.formato === "plano") {
+      return ContentService.createTextOutput("ERROR|" + err.toString())
+        .setMimeType(ContentService.MimeType.TEXT);
+    }
+    return responderConfiguracion({
+      status: "error",
+      message: err.toString()
+    }, callback);
+  }
+}
+
+function obtenerHojaControl() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Control");
+  if (!sheet) {
+    sheet = ss.insertSheet("Control");
+    sheet.getRange("A1:B3").setValues([
+      ["Intervalo de muestreo (minutos)", 3],
+      ["Solicitar reinicio", false],
+      ["Último reinicio confirmado", ""]
+    ]);
+    sheet.getRange("B2").insertCheckboxes();
+    return sheet;
+  }
+
+  if (sheet.getRange("A1").isBlank()) {
+    sheet.getRange("A1").setValue("Intervalo de muestreo (minutos)");
+  }
+  if (sheet.getRange("B1").isBlank()) {
+    sheet.getRange("B1").setValue(3);
+  }
+  if (sheet.getRange("A2").isBlank()) {
+    sheet.getRange("A2").setValue("Solicitar reinicio");
+  }
+  if (sheet.getRange("B2").isBlank()) {
+    sheet.getRange("B2").insertCheckboxes();
+  }
+  if (sheet.getRange("A3").isBlank()) {
+    sheet.getRange("A3").setValue("Último reinicio confirmado");
+  }
+  return sheet;
+}
+
+function confirmarReinicio() {
+  try {
+    var sheet = obtenerHojaControl();
+    if (sheet.getRange("B2").getValue() === true) {
+      sheet.getRange("B2").setValue(false);
+      sheet.getRange("B3").setValue(new Date());
+    }
+    return ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT);
+  } catch (err) {
+    return ContentService.createTextOutput("ERROR|" + err.toString())
+      .setMimeType(ContentService.MimeType.TEXT);
+  }
 }
 
 function obtenerDatosClima(e) {

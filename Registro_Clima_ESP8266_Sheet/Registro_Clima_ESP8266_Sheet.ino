@@ -30,8 +30,8 @@
     -----------------------------------------------------------------
     * Monitoreo ambiental: Temperatura, humedad, presión atmosférica, 
       luminosidad (Luxes a % con ajuste anti-cero en interiores) y lluvia.
-    * Registro de datos: Envío automático cada 3 minutos a Google Sheets mediante 
-      HTTPS seguro (`WiFiClientSecure` con `setInsecure()` y redirección estricta).
+    * Registro de datos: Envío automático al intervalo configurado en la pestaña
+      Control de Google Sheets, mediante HTTPS y redirección estricta.
     * Resiliencia de red: Almacenamiento de credenciales WiFi en EEPROM. Si falla 
       la conexión, reintenta y de persistir levanta un portal cautivo AP (192.168.4.1).
     * Servidor Web local: Interfaz integrada alojada en LittleFS para consultar 
@@ -68,10 +68,11 @@ const int LED_ROJO   = 14; // D5
 const int LED_VERDE  = 12; // D6
 const int LED_AZUL   = 13; // D7
 
-// Variables de tiempo (se actualizan desde la EEPROM, por defecto 3 minutos)
+// El intervalo se carga desde EEPROM y se sincroniza con Google Sheets (por defecto 3 minutos).
 unsigned long INTERVALO_ENVIO = 180000; // en milisegundos
 int intervaloMinutos = 3; 
 unsigned long ultimoEnvio = 0;
+unsigned long ultimoChequeoConfiguracion = 0;
 
 // Control de parpadeo del LED (No bloqueante)
 unsigned long anteriorMillisLED = 0;
@@ -127,14 +128,15 @@ void agregarLog(String msg) {
 }
 
 // Funciones EEPROM ampliadas para SSID, Pass e Intervalo (512 bytes totales)
-// Estructura EEPROM: [0-31] SSID | [32-63] PASS | [64] Intervalo en Minutos
+// Estructura EEPROM: [0-31] SSID | [32-63] PASS | [64-65] Intervalo en Minutos
 void guardarConfigEEPROM(String s, String p, int minutos) {
   EEPROM.begin(512);
-  for (int i = 0; i < 65; ++i) EEPROM.write(i, 0); // limpiar bloques anteriores
+  for (int i = 0; i < 66; ++i) EEPROM.write(i, 0); // limpiar bloques anteriores
   
   for (unsigned int i = 0; i < s.length() && i < 31; ++i) EEPROM.write(i, s[i]);
   for (unsigned int i = 0; i < p.length() && i < 31; ++i) EEPROM.write(32 + i, p[i]);
-  EEPROM.write(64, (uint8_t)minutos);
+  EEPROM.write(64, (uint8_t)(minutos & 0xFF));
+  EEPROM.write(65, (uint8_t)((minutos >> 8) & 0xFF));
   
   EEPROM.commit();
   agregarLog("[EEPROM] Configuración guardada (SSID y Minutos: " + String(minutos) + ").");
@@ -146,7 +148,16 @@ void cargarConfigEEPROM() {
   char p[32] = {0};
   for (int i = 0; i < 32; ++i) s[i] = EEPROM.read(i);
   for (int i = 0; i < 32; ++i) p[i] = EEPROM.read(32 + i);
-  uint8_t minGuardados = EEPROM.read(64);
+  uint8_t intervaloBajo = EEPROM.read(64);
+  uint8_t intervaloAlto = EEPROM.read(65);
+  uint16_t minGuardados = 0;
+  if (intervaloBajo == 0xFF && intervaloAlto == 0xFF) {
+    minGuardados = 0;
+  } else if (intervaloAlto == 0xFF) {
+    minGuardados = intervaloBajo; // Compatibilidad con el formato anterior de un byte.
+  } else {
+    minGuardados = (uint16_t)intervaloBajo | ((uint16_t)intervaloAlto << 8);
+  }
 
   String readS = String(s);
   String readP = String(p);
@@ -154,7 +165,7 @@ void cargarConfigEEPROM() {
   wifiSSID = (readS.length() > 0) ? readS : DEFAULT_SSID;
   wifiPass = (readP.length() > 0) ? readP : DEFAULT_PASS;
   
-  if (minGuardados > 0 && minGuardados <= 1440) { // Validar rango coherente (hasta 24 horas)
+  if (minGuardados > 0 && minGuardados <= 1440) {
     intervaloMinutos = minGuardados;
   } else {
     intervaloMinutos = 3; // Valor por defecto
@@ -299,6 +310,99 @@ void enviarDatos() {
   enviandoAhora = false;
 }
 
+bool leerConfiguracionRemota(int &minutos, bool &reiniciar) {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+
+  String url = String(SERVER_URL) + "?action=obtenerControl&formato=plano";
+  if (!http.begin(client, url)) {
+    agregarLog("[CONTROL] No se pudo iniciar la consulta a Google Sheets.");
+    return false;
+  }
+
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setTimeout(10000);
+  int httpCode = http.GET();
+  String respuesta = httpCode > 0 ? http.getString() : "";
+  http.end();
+
+  if (httpCode != HTTP_CODE_OK) {
+    agregarLog("[CONTROL] Error al consultar Google Sheets: " + String(httpCode));
+    return false;
+  }
+
+  int separador = respuesta.indexOf('|');
+  if (separador <= 0) {
+    agregarLog("[CONTROL] Respuesta inválida de Google Sheets.");
+    return false;
+  }
+
+  int minutosLeidos = respuesta.substring(0, separador).toInt();
+  String reinicioLeido = respuesta.substring(separador + 1);
+  reinicioLeido.trim();
+  if (minutosLeidos < 1 || minutosLeidos > 1440 ||
+      (reinicioLeido != "0" && reinicioLeido != "1")) {
+    agregarLog("[CONTROL] Intervalo o comando remoto inválido.");
+    return false;
+  }
+
+  minutos = minutosLeidos;
+  reiniciar = reinicioLeido == "1";
+  return true;
+}
+
+bool confirmarReinicioRemoto() {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+
+  String url = String(SERVER_URL) + "?action=confirmarReinicio";
+  if (!http.begin(client, url)) {
+    agregarLog("[CONTROL] No se pudo confirmar el reinicio en Google Sheets.");
+    return false;
+  }
+
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setTimeout(10000);
+  int httpCode = http.GET();
+  String respuesta = httpCode > 0 ? http.getString() : "";
+  respuesta.trim();
+  http.end();
+
+  if (httpCode != HTTP_CODE_OK || respuesta != "OK") {
+    agregarLog("[CONTROL] Google Sheets no confirmó el reinicio.");
+    return false;
+  }
+  return true;
+}
+
+void sincronizarConfiguracionRemota() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  int minutosRemotos = intervaloMinutos;
+  bool reiniciarRemoto = false;
+  if (!leerConfiguracionRemota(minutosRemotos, reiniciarRemoto)) return;
+
+  if (minutosRemotos != intervaloMinutos) {
+    intervaloMinutos = minutosRemotos;
+    INTERVALO_ENVIO = (unsigned long)intervaloMinutos * 60000UL;
+    guardarConfigEEPROM(wifiSSID, wifiPass, intervaloMinutos);
+    ultimoEnvio = millis();
+    agregarLog("[CONTROL] Intervalo actualizado desde Google Sheets: " +
+               String(intervaloMinutos) + " min.");
+  }
+
+  if (reiniciarRemoto) {
+    if (confirmarReinicioRemoto()) {
+      agregarLog("[CONTROL] Reinicio remoto confirmado. Reiniciando estación...");
+      delay(300);
+      ESP.restart();
+    }
+    agregarLog("[CONTROL] No se ejecutó el reinicio; se volverá a consultar.");
+  }
+}
+
 void actualizarEstadoLED() {
   unsigned long actual = millis();
   if (enviandoAhora) {
@@ -399,21 +503,15 @@ void configurarServidorWeb() {
     }
   });
 
-  // NUEVO: Endpoint para cambiar el intervalo de envío en minutos
+  // El intervalo se administra en Google Sheets para mantener una sola fuente de verdad.
   server.on("/api/intervalo", HTTP_POST, []() {
-    if (server.hasArg("minutos")) {
-      int nuevosMin = server.arg("minutos").toInt();
-      if (nuevosMin > 0 && nuevosMin <= 1440) {
-        guardarConfigEEPROM(wifiSSID, wifiPass, nuevosMin);
-        server.send(200, "text/plain", "OK");
-        delay(1000);
-        ESP.restart();
-      } else {
-        server.send(400, "text/plain", "Valor inválido (1-1440)");
-      }
-    } else {
-      server.send(400, "text/plain", "Falta argumento");
-    }
+    server.send(409, "text/plain", "Configure el intervalo en la pestaña Control de Google Sheets.");
+  });
+
+  server.on("/api/restart", HTTP_POST, []() {
+    server.send(200, "text/plain", "Reiniciando...");
+    delay(500);
+    ESP.restart();
   });
 
   server.on("/api/send", HTTP_GET, []() {
@@ -455,14 +553,24 @@ void setup() {
   configurarServidorWeb();
 
   if (!modoAP) {
+    sincronizarConfiguracionRemota();
+    ultimoChequeoConfiguracion = millis();
     enviarDatos();
     ultimoEnvio = millis();
+  } else {
+    ultimoChequeoConfiguracion = millis();
   }
 }
 
 void loop() {
   server.handleClient();
   actualizarEstadoLED();
+
+  if (WiFi.status() == WL_CONNECTED &&
+      millis() - ultimoChequeoConfiguracion >= 60000UL) {
+    ultimoChequeoConfiguracion = millis();
+    sincronizarConfiguracionRemota();
+  }
 
   if (millis() - ultimoEnvio >= INTERVALO_ENVIO) {
     ultimoEnvio = millis();

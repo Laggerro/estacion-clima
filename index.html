@@ -16,7 +16,7 @@
       <div class="logo-badge"><i data-lucide="radio"></i></div>
       <div>
         <h1>Estación Climatológica Wilde ISD</h1>
-        <span class="subtitle">Garita Stevenson Experimental • Telemetría cada 1 Hr.</span>
+        <span class="subtitle">Garita Stevenson Experimental • Telemetría cada <strong id="sampling-interval-label">consultando...</strong></span>
       </div>
     </div>
 
@@ -275,6 +275,11 @@
           <span id="config-feedback" class="form-message" role="status" aria-live="polite"></span>
         </form>
         <p class="settings-note">Con la referencia de 100.000 lx, una lectura de 184 lx equivale aproximadamente a 6,7% en esta escala. Este valor se guarda en Configuracion!F2; las lecturas originales en lux no se modifican.</p>
+      </div>
+      <div class="card settings-card">
+        <h2>Configuración de muestreo</h2>
+        <p id="sampling-config-status">Consultando intervalo de muestreo en Google Sheets...</p>
+        <p class="settings-note">Editá los minutos en la pestaña Control, celda B1. Para solicitar un reinicio remoto, activá la casilla Control!B2; el ESP8266 la desactivará al recibir la orden.</p>
       </div>
     </section>
   </main>
