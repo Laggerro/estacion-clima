@@ -1,9 +1,9 @@
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSYNyQpOOjLdIgsXyUCfpI8I3yZIxtIPF6Gta2JBsch3OCaEKgWJ1RNQimsVy5SZ_9xQ/exec";
-
 let allRecords = [];
 let charts = {};
 let maxLux = 100000;
+let appsScriptUrl = "";
+let appsScriptConfigError = "";
 const LUMINOSITY_GAMMA = 0.43;
 
 const VAR_META = {
@@ -15,11 +15,12 @@ const VAR_META = {
   luz: { label: "Luminosidad", unit: "%", color: "#fbbf24" }
 };
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   lucide.createIcons();
   setupNavigation();
   setupHistoryControls();
   setupConfiguration();
+  await loadAppsScriptConfig();
   loadMaxLux();
   loadSamplingInterval();
   loadWeatherData();
@@ -107,6 +108,43 @@ function setupConfiguration() {
   });
 }
 
+function esUrlAppsScriptValida(url) {
+  return typeof url === "string" &&
+    /^https:\/\/script\.google\.com\/macros\/s\/[^/?#]+\/exec$/.test(url);
+}
+
+async function loadAppsScriptConfig() {
+  const status = document.getElementById("apps-script-config-status");
+  try {
+    const response = await fetch("./config.json", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const config = await response.json();
+    if (!config || !esUrlAppsScriptValida(config.appsScriptUrl)) {
+      throw new Error("config.json no contiene una URL válida en appsScriptUrl.");
+    }
+
+    appsScriptUrl = config.appsScriptUrl;
+    appsScriptConfigError = "";
+    status.textContent = "Conexión configurada desde config.json.";
+    status.classList.remove("error");
+  } catch (error) {
+    appsScriptUrl = "";
+    appsScriptConfigError = `No se pudo cargar config.json: ${error.message}`;
+    status.textContent = appsScriptConfigError;
+    status.classList.add("error");
+  }
+}
+
+function getAppsScriptUrl() {
+  if (!appsScriptUrl) {
+    throw new Error(appsScriptConfigError || "No hay una URL de Apps Script configurada.");
+  }
+  return appsScriptUrl;
+}
+
 function loadMaxLux() {
   const feedback = document.getElementById("config-feedback");
 
@@ -164,7 +202,13 @@ function requestSamplingConfig(onSuccess, onError) {
 
   const script = document.createElement("script");
   script.id = scriptId;
-  const url = new URL(APPS_SCRIPT_URL);
+  let url;
+  try {
+    url = new URL(getAppsScriptUrl());
+  } catch (error) {
+    onError(error);
+    return;
+  }
   url.searchParams.set("action", "obtenerControl");
   url.searchParams.set("callback", callbackName);
   url.searchParams.set("t", String(Date.now()));
@@ -215,7 +259,13 @@ function requestMaxLux(action, value, callbackName, onSuccess, onError) {
 
   const script = document.createElement("script");
   script.id = scriptId;
-  const url = new URL(APPS_SCRIPT_URL);
+  let url;
+  try {
+    url = new URL(getAppsScriptUrl());
+  } catch (error) {
+    onError(error);
+    return;
+  }
   url.searchParams.set("action", action);
   url.searchParams.set("callback", callbackName);
   url.searchParams.set("t", String(Date.now()));
@@ -262,9 +312,12 @@ function loadWeatherData() {
   banner.innerHTML = `<span class="pulse"></span> Sincronizando datos con Google Sheets...`;
   refreshBtn.classList.add("spinning");
 
-  if (APPS_SCRIPT_URL.includes("PEGAR_AQUI")) {
+  let appsScriptUrl;
+  try {
+    appsScriptUrl = getAppsScriptUrl();
+  } catch (error) {
     banner.className = "status-banner error";
-    banner.textContent = "Aviso: Falta configurar la URL del Google Apps Script en app.js";
+    banner.textContent = `Aviso: ${error.message}`;
     refreshBtn.classList.remove("spinning");
     return;
   }
@@ -305,7 +358,7 @@ function loadWeatherData() {
 
   const script = document.createElement("script");
   script.id = "jsonp-weather";
-  script.src = `${APPS_SCRIPT_URL}?callback=handleWeatherJSONP&t=${Date.now()}`;
+  script.src = `${appsScriptUrl}?callback=handleWeatherJSONP&t=${Date.now()}`;
   script.onerror = function() {
     banner.className = "status-banner error";
     banner.textContent = "Aviso: No se pudo conectar con Google Apps Script.";

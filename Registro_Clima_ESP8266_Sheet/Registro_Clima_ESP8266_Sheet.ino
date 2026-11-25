@@ -32,8 +32,8 @@
       luminosidad (Luxes a % con ajuste anti-cero en interiores) y lluvia.
     * Registro de datos: Envío automático al intervalo configurado en la pestaña
       Control de Google Sheets, mediante HTTPS y redirección estricta.
-    * Resiliencia de red: Almacenamiento de credenciales WiFi en EEPROM. Si falla 
-      la conexión, reintenta y de persistir levanta un portal cautivo AP (192.168.4.1).
+    * Resiliencia y configuración: Credenciales WiFi y URL de Apps Script en EEPROM.
+      Si falla la conexión, reintenta y de persistir inicia el AP de configuración (192.168.4.1).
     * Servidor Web local: Interfaz integrada alojada en LittleFS para consultar 
       el estado de los sensores, revisar logs en tiempo real y reconfigurar la red.
  ==============================================================================
@@ -50,11 +50,10 @@
 #include <EEPROM.h>
 
 // ==========================================
-// CONFIGURACIÓN POR DEFECTO Y GOOGLE SHEETS
+// CONFIGURACIÓN EEPROM Y GOOGLE SHEETS
 // ==========================================
-const char* DEFAULT_SSID = "Vilers-2";
-const char* DEFAULT_PASS = "Pabada686";
-const char* SERVER_URL = "https://script.google.com/macros/s/AKfycbzSYNyQpOOjLdIgsXyUCfpI8I3yZIxtIPF6Gta2JBsch3OCaEKgWJ1RNQimsVy5SZ_9xQ/exec";
+const size_t SERVER_URL_EEPROM_START = 66;
+const size_t SERVER_URL_EEPROM_SIZE = 446;
 
 // ==========================================
 // PINES ESP8266 (NodeMCU / Wemos D1 Mini)
@@ -92,6 +91,7 @@ bool enviandoAhora = false;
 bool syncGoogleError = false;
 String wifiSSID = "";
 String wifiPass = "";
+String serverUrl = "";
 String ipGuardada = "Ninguna";
 String ultimoEstadoHTTP = "Sin envíos aún";
 String historialLogs = "";
@@ -127,9 +127,21 @@ void agregarLog(String msg) {
   }
 }
 
-// Funciones EEPROM ampliadas para SSID, Pass e Intervalo (512 bytes totales)
-// Estructura EEPROM: [0-31] SSID | [32-63] PASS | [64-65] Intervalo en Minutos
-void guardarConfigEEPROM(String s, String p, int minutos) {
+bool esUrlAppsScriptValida(String url) {
+  url.trim();
+  const String prefijo = "https://script.google.com/macros/s/";
+  const String sufijo = "/exec";
+  if (!url.startsWith(prefijo) || !url.endsWith(sufijo) ||
+      url.length() >= SERVER_URL_EEPROM_SIZE ||
+      url.indexOf('?') >= 0 || url.indexOf('#') >= 0) {
+    return false;
+  }
+  String idImplementacion = url.substring(prefijo.length(), url.length() - sufijo.length());
+  return idImplementacion.length() > 0 && idImplementacion.indexOf('/') < 0;
+}
+
+// EEPROM: [0-31] SSID | [32-63] PASS | [64-65] Intervalo | [66-511] URL
+void guardarConfigEEPROM(String s, String p, int minutos, String url) {
   EEPROM.begin(512);
   for (int i = 0; i < 66; ++i) EEPROM.write(i, 0); // limpiar bloques anteriores
   
@@ -137,19 +149,39 @@ void guardarConfigEEPROM(String s, String p, int minutos) {
   for (unsigned int i = 0; i < p.length() && i < 31; ++i) EEPROM.write(32 + i, p[i]);
   EEPROM.write(64, (uint8_t)(minutos & 0xFF));
   EEPROM.write(65, (uint8_t)((minutos >> 8) & 0xFF));
+  for (size_t i = 0; i < SERVER_URL_EEPROM_SIZE; ++i) {
+    EEPROM.write(SERVER_URL_EEPROM_START + i, 0);
+  }
+  for (size_t i = 0; i < url.length() && i < SERVER_URL_EEPROM_SIZE - 1; ++i) {
+    EEPROM.write(SERVER_URL_EEPROM_START + i, url[i]);
+  }
   
   EEPROM.commit();
-  agregarLog("[EEPROM] Configuración guardada (SSID y Minutos: " + String(minutos) + ").");
+  agregarLog("[EEPROM] Wi-Fi, URL de Google Sheets e intervalo guardados.");
 }
 
 void cargarConfigEEPROM() {
   EEPROM.begin(512);
   char s[32] = {0};
   char p[32] = {0};
-  for (int i = 0; i < 32; ++i) s[i] = EEPROM.read(i);
-  for (int i = 0; i < 32; ++i) p[i] = EEPROM.read(32 + i);
+  for (int i = 0; i < 31; ++i) {
+    uint8_t byteLeido = EEPROM.read(i);
+    if (byteLeido == 0 || byteLeido == 0xFF) break;
+    s[i] = (char)byteLeido;
+  }
+  for (int i = 0; i < 31; ++i) {
+    uint8_t byteLeido = EEPROM.read(32 + i);
+    if (byteLeido == 0 || byteLeido == 0xFF) break;
+    p[i] = (char)byteLeido;
+  }
   uint8_t intervaloBajo = EEPROM.read(64);
   uint8_t intervaloAlto = EEPROM.read(65);
+  char url[SERVER_URL_EEPROM_SIZE] = {0};
+  for (size_t i = 0; i < SERVER_URL_EEPROM_SIZE - 1; ++i) {
+    uint8_t byteLeido = EEPROM.read(SERVER_URL_EEPROM_START + i);
+    if (byteLeido == 0 || byteLeido == 0xFF) break;
+    url[i] = (char)byteLeido;
+  }
   uint16_t minGuardados = 0;
   if (intervaloBajo == 0xFF && intervaloAlto == 0xFF) {
     minGuardados = 0;
@@ -162,8 +194,10 @@ void cargarConfigEEPROM() {
   String readS = String(s);
   String readP = String(p);
 
-  wifiSSID = (readS.length() > 0) ? readS : DEFAULT_SSID;
-  wifiPass = (readP.length() > 0) ? readP : DEFAULT_PASS;
+  wifiSSID = readS;
+  wifiPass = readP;
+  String urlLeida = String(url);
+  serverUrl = esUrlAppsScriptValida(urlLeida) ? urlLeida : "";
   
   if (minGuardados > 0 && minGuardados <= 1440) {
     intervaloMinutos = minGuardados;
@@ -172,7 +206,9 @@ void cargarConfigEEPROM() {
   }
   
   INTERVALO_ENVIO = (unsigned long)intervaloMinutos * 60000UL; // Convertir a milisegundos
-  agregarLog("[EEPROM] SSID cargado: " + wifiSSID + " | Intervalo: " + String(intervaloMinutos) + " min");
+  agregarLog("[EEPROM] Wi-Fi " + String(wifiSSID.length() ? "configurado" : "sin configurar") +
+             " | URL de Sheets " + String(serverUrl.length() ? "configurada" : "sin configurar") +
+             " | Intervalo: " + String(intervaloMinutos) + " min");
 }
 
 void inicializarSensores() {
@@ -268,6 +304,14 @@ void enviarDatos() {
   enviandoAhora = true;
   leerSensores();
 
+  if (!serverUrl.length()) {
+    ultimoEstadoHTTP = "URL Google Sheets no configurada";
+    syncGoogleError = true;
+    agregarLog("[SHEETS] Configurá la URL del Apps Script desde la página local.");
+    enviandoAhora = false;
+    return;
+  }
+
   if (WiFi.status() != WL_CONNECTED) {
     if (!conectarWiFi()) {
       ultimoEstadoHTTP = "Fallo WiFi";
@@ -282,7 +326,7 @@ void enviarDatos() {
   client.setInsecure();
   HTTPClient http;
   
-  String url = String(SERVER_URL) + "?";
+  String url = serverUrl + "?";
   url += "temperatura=" + String(tempActual, 1);
   url += "&humedad="    + String(humActual, 1);
   url += "&presion="    + String(presActual, 1);
@@ -315,7 +359,7 @@ bool leerConfiguracionRemota(int &minutos, bool &reiniciar) {
   client.setInsecure();
   HTTPClient http;
 
-  String url = String(SERVER_URL) + "?action=obtenerControl&formato=plano";
+  String url = serverUrl + "?action=obtenerControl&formato=plano";
   if (!http.begin(client, url)) {
     agregarLog("[CONTROL] No se pudo iniciar la consulta a Google Sheets.");
     return false;
@@ -357,7 +401,7 @@ bool confirmarReinicioRemoto() {
   client.setInsecure();
   HTTPClient http;
 
-  String url = String(SERVER_URL) + "?action=confirmarReinicio";
+  String url = serverUrl + "?action=confirmarReinicio";
   if (!http.begin(client, url)) {
     agregarLog("[CONTROL] No se pudo confirmar el reinicio en Google Sheets.");
     return false;
@@ -378,7 +422,7 @@ bool confirmarReinicioRemoto() {
 }
 
 void sincronizarConfiguracionRemota() {
-  if (WiFi.status() != WL_CONNECTED) return;
+  if (WiFi.status() != WL_CONNECTED || !serverUrl.length()) return;
 
   int minutosRemotos = intervaloMinutos;
   bool reiniciarRemoto = false;
@@ -471,6 +515,7 @@ void configurarServidorWeb() {
     String json = "{";
     json += "\"modoAP\":"       + String(modoAP ? "true" : "false") + ",";
     json += "\"ssid\":\""       + wifiSSID + "\",";
+    json += "\"serverUrl\":\""  + serverUrl + "\",";
     json += "\"intervalo\":"    + String(intervaloMinutos) + ","; // Enviamos el intervalo actual a la web
     json += "\"rssi\":"         + String(WiFi.RSSI()) + ",";
     json += "\"ipActual\":\""   + (modoAP ? WiFi.softAPIP().toString() : WiFi.localIP().toString()) + "\",";
@@ -494,13 +539,34 @@ void configurarServidorWeb() {
     if (server.hasArg("ssid")) {
       String nuevoSsid = server.arg("ssid");
       String nuevoPass = server.arg("pass");
-      guardarConfigEEPROM(nuevoSsid, nuevoPass, intervaloMinutos);
+      guardarConfigEEPROM(nuevoSsid, nuevoPass, intervaloMinutos, serverUrl);
       server.send(200, "text/plain", "OK");
       delay(1000);
       ESP.restart();
     } else {
       server.send(400, "text/plain", "Falta SSID");
     }
+  });
+
+  server.on("/api/server", HTTP_POST, []() {
+    if (!server.hasArg("url")) {
+      server.send(400, "text/plain", "Falta la URL del Apps Script");
+      return;
+    }
+
+    String nuevaUrl = server.arg("url");
+    nuevaUrl.trim();
+    if (!esUrlAppsScriptValida(nuevaUrl)) {
+      server.send(400, "text/plain",
+                  "La URL debe ser HTTPS, de script.google.com y terminar en /exec.");
+      return;
+    }
+
+    serverUrl = nuevaUrl;
+    guardarConfigEEPROM(wifiSSID, wifiPass, intervaloMinutos, serverUrl);
+    server.send(200, "text/plain", "OK");
+    delay(500);
+    ESP.restart();
   });
 
   // El intervalo se administra en Google Sheets para mantener una sola fuente de verdad.
@@ -543,11 +609,16 @@ void setup() {
   
   inicializarSensores();
 
-  if (!conectarWiFi()) {
-    delay(2000);
+  if (wifiSSID.length() > 0) {
     if (!conectarWiFi()) {
-      activarModoAP();
+      delay(2000);
+      if (!conectarWiFi()) {
+        activarModoAP();
+      }
     }
+  } else {
+    agregarLog("[WIFI] Sin credenciales guardadas; iniciando portal de configuración.");
+    activarModoAP();
   }
 
   configurarServidorWeb();

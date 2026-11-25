@@ -80,6 +80,19 @@
       </div>
 
       <div class="card">
+        <div class="label" style="margin-bottom: 8px;">Google Sheets / Apps Script</div>
+        <form onsubmit="guardarServerUrl(event)">
+          <label style="font-size:0.85rem;">URL de implementación del Apps Script</label>
+          <input type="url" id="server-url" required
+                 placeholder="https://script.google.com/macros/s/ID/exec">
+          <button type="submit">Guardar URL y Reiniciar</button>
+        </form>
+        <div style="font-size: 0.8rem; margin-top: 8px; color: var(--muted);">
+          Se guarda en la memoria del ESP8266. Usá la URL de implementación terminada en /exec.
+        </div>
+      </div>
+
+      <div class="card">
         <div class="label" style="margin-bottom: 8px;">Intervalo de Muestreo</div>
         <div style="font-size: 0.85rem; margin-bottom: 12px; color: var(--muted);">
           Frecuencia actual: <strong id="lbl-intervalo" style="color: var(--accent);">--</strong> min
@@ -99,6 +112,10 @@
         const d = await res.json();
 
         document.getElementById('net-badge').textContent = d.modoAP ? 'MODO AP (192.168.4.1)' : `WiFi: ${d.ssid} (${d.rssi} dBm)`;
+        const serverUrlInput = document.getElementById('server-url');
+        if (document.activeElement !== serverUrlInput) {
+          serverUrlInput.value = d.serverUrl || '';
+        }
         document.getElementById('ip-actual').textContent = d.ipActual;
         document.getElementById('ip-guardada').textContent = d.ipGuardada;
         document.getElementById('last-http').textContent = d.ultimoHttp;
@@ -156,6 +173,28 @@
         body: `ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(pass)}`
       });
       alert('Credenciales guardadas. El ESP8266 se está reiniciando...');
+    }
+
+    async function guardarServerUrl(e) {
+      e.preventDefault();
+      const url = document.getElementById('server-url').value.trim();
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/?#]+\/exec$/.test(url)) {
+        alert('Ingresá la URL HTTPS de implementación del Apps Script, terminada en /exec.');
+        return;
+      }
+      if (!confirm('¿Guardar la URL de Google Sheets y reiniciar el equipo?')) return;
+
+      try {
+        const res = await fetch('/api/server', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `url=${encodeURIComponent(url)}`
+        });
+        if (!res.ok) throw new Error(await res.text());
+        alert('URL guardada. El ESP8266 se está reiniciando...');
+      } catch (error) {
+        alert(`No se pudo guardar la URL: ${error.message}`);
+      }
     }
 
     async function reiniciarEquipo() {

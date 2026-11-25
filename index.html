@@ -264,6 +264,11 @@
 
     <section id="view-configuracion" class="view">
       <div class="card settings-card">
+        <h2>Conexión con Google Sheets</h2>
+        <p>El panel obtiene la URL desde config.json, publicado en la raíz del sitio. El administrador la configura una vez; los visitantes no tienen que ingresar nada.</p>
+        <p id="apps-script-config-status" class="form-message" role="status" aria-live="polite">Cargando configuración del sitio...</p>
+      </div>
+      <div class="card settings-card">
         <h2>Configuración de luminosidad</h2>
         <p>Definí cuántos lux representan el 100% para la visualización. Los valores se transforman con una curva de potencia (gamma 0,43) para que los niveles bajos sean visibles; es un índice visual, no una proporción física directa de lux. Como referencia inicial, un día soleado de verano al mediodía puede rondar los 100.000 lx.</p>
         <form id="config-form">
@@ -285,7 +290,7 @@
   </main>
 
   <footer>
-    Estación Climatológica Wilde ISD • Datos adquiridos automáticamente por nodo ESP8266
+    Estación Climatológica Wilde ISD • Datos adquiridos automáticamente por nodo ESP8266 @LaggerSoft 2026
   </footer>
 
   <script src="app.js"></script>
