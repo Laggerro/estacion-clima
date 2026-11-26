@@ -431,7 +431,7 @@ void sincronizarConfiguracionRemota() {
   if (minutosRemotos != intervaloMinutos) {
     intervaloMinutos = minutosRemotos;
     INTERVALO_ENVIO = (unsigned long)intervaloMinutos * 60000UL;
-    guardarConfigEEPROM(wifiSSID, wifiPass, intervaloMinutos);
+    guardarConfigEEPROM(wifiSSID, wifiPass, intervaloMinutos, serverUrl);
     ultimoEnvio = millis();
     agregarLog("[CONTROL] Intervalo actualizado desde Google Sheets: " +
                String(intervaloMinutos) + " min.");
